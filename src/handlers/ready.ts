@@ -2,9 +2,8 @@ import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v10";
 import fs from "fs";
 import { MyClient } from "../classes";
-import { token } from "../constants";
 
-const rest = new REST({ version: "10" }).setToken(token);
+const rest = new REST({ version: "10" }).setToken(process.env.token);
 async function loadSlashCommands(client: MyClient) {
   if (!client.user) return;
 
