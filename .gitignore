@@ -1,0 +1,5 @@
+downloads
+media
+node_modules
+.env
+package-lock.json
