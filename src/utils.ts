@@ -6,7 +6,7 @@ export async function downloadFiles(interaction: ButtonInteraction, message: Mes
     return;
   }
 
-  await interaction.reply("Fetching thread information..");
+  await interaction.reply({ ephemeral: true, content: "Fetching thread information.." });
   const description = message.embeds[0].description.split("\n");
 
   const thread = (await interaction.guild.channels.fetch(
