@@ -16,7 +16,7 @@ use serenity::{
 
 use crate::command_trait::Command;
 
-const CHUNK_SIZE: usize = 251_658_24; // 24 MB
+const CHUNK_SIZE: usize = 6_291_456; // 6 MB
 
 pub struct Upload;
 
@@ -114,7 +114,7 @@ impl Command for Upload {
             pb.inc(bytes_read as u64);
             chunk_index += 1;
 
-            if chunk_index % 10 == 0 {
+            if chunk_index % 5 == 0 {
                 command
                     .edit_response(
                         &ctx.http,

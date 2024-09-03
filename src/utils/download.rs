@@ -1,8 +1,9 @@
-use std::{fs::File, io::Write, path::Path};
-
 use base64::{engine::general_purpose, Engine as _};
+use indicatif::{ProgressBar, ProgressStyle};
 use reqwest;
 use serenity::all::{ChannelId, ComponentInteraction, Context, EditInteractionResponse};
+use std::path::Path;
+use tokio::io::AsyncWriteExt;
 
 pub async fn download_file(component: ComponentInteraction, ctx: Context) {
     component.defer_ephemeral(&ctx.http).await.unwrap();
@@ -41,11 +42,16 @@ pub async fn download_file(component: ComponentInteraction, ctx: Context) {
 
         let thread_id: u64 = thread_id_str.parse().expect("Failed to parse thread ID");
         let mut all_messages = Vec::new();
+        let mut last_message_id = None;
 
         loop {
             let messages = ctx
                 .http
-                .get_messages(ChannelId::new(thread_id), None, Some(100))
+                .get_messages(
+                    ChannelId::new(thread_id),
+                    last_message_id.map(|id| serenity::all::MessagePagination::Before(id)),
+                    Some(100),
+                )
                 .await
                 .unwrap();
 
@@ -57,6 +63,10 @@ pub async fn download_file(component: ComponentInteraction, ctx: Context) {
 
             if messages.len() < 100 {
                 break;
+            }
+
+            if let Some(last_message) = messages.last() {
+                last_message_id = Some(last_message.id);
             }
         }
 
@@ -70,33 +80,47 @@ pub async fn download_file(component: ComponentInteraction, ctx: Context) {
 
         // Reverse the vec
         all_messages.reverse();
-        let mut file_content = String::new();
+
+        let file_path = Path::new("downloads").join(format!("{}.{}", name, format));
+        let mut file = tokio::fs::File::create(&file_path).await.unwrap();
+
+        let total_messages = all_messages.len();
+        let pb = ProgressBar::new(total_messages as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("[{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
 
         for (index, message) in all_messages.iter().enumerate() {
             if let Some(attachment) = message.attachments.first() {
-                component
-                    .edit_response(
-                        &ctx.http,
-                        EditInteractionResponse::new().content(format!(
-                            "Downloading content... ({}/{})",
-                            index + 1,
-                            all_messages.len(),
-                        )),
-                    )
-                    .await
-                    .unwrap();
-
                 let response = reqwest::get(&attachment.url).await.unwrap();
                 let chunk_content = response.text().await.unwrap();
-                file_content.push_str(&chunk_content);
+
+                let decoded_chunk = general_purpose::STANDARD.decode(chunk_content).unwrap();
+                file.write_all(&decoded_chunk).await.unwrap();
+
+                pb.inc(1);
+
+                if index % 10 == 0 || index == total_messages - 1 {
+                    component
+                        .edit_response(
+                            &ctx.http,
+                            EditInteractionResponse::new().content(format!(
+                                "Downloading content... ({}/{})",
+                                index + 1,
+                                total_messages,
+                            )),
+                        )
+                        .await
+                        .unwrap();
+                }
             }
         }
 
-        let decoded_content = general_purpose::STANDARD.decode(file_content).unwrap();
-
-        let file_path = Path::new("downloads").join(format!("{}.{}", name, format));
-        let mut file = File::create(&file_path).unwrap();
-        file.write_all(&decoded_content).unwrap();
+        pb.finish_with_message("Download complete");
+        file.flush().await.unwrap();
 
         component
             .edit_response(
