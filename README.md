@@ -4,7 +4,7 @@ A Discord bot for uploading and downloading large files in chunks.
 
 ## How to Use
 
-1. Download the appropriate binary for your system (x86 or ARM) from the [releases section](https://github.com/yourusername/discord-mass-uploader/releases) of this repository.
+1. Download the appropriate binary for your system (x86 or ARM) from the [releases section](https://github.com/yorunoken/discord-mass-uploader/releases) of this repository.
 
 2. Create two folders in the same directory as the binary:
    - `media`: Place files you want to upload here.
