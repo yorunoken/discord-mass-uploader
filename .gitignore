@@ -1,6 +1,4 @@
-dist
-downloads
 media
-node_modules
+downloads
 .env
-package-lock.json
+/target
