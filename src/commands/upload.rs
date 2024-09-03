@@ -1,5 +1,7 @@
 use base64::{engine::general_purpose, Engine as _};
-use std::fs::{read, File};
+use indicatif::{ProgressBar, ProgressStyle};
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, BufReader};
 
 use serenity::{
     all::{
@@ -30,7 +32,7 @@ impl Command for Upload {
         let file_option = command.data.options.iter().find(|opt| opt.name == "file");
         let format_option = command.data.options.iter().find(|opt| opt.name == "format");
 
-        let file = match file_option {
+        let file_name = match file_option {
             Some(option) => match &option.value {
                 serenity::all::CommandDataOptionValue::String(value) => value,
                 _ => return Err(Error::Other("Invalid file option type")),
@@ -46,93 +48,86 @@ impl Command for Upload {
             None => return Err(Error::Other("File format not provided")),
         };
 
-        if let Err(_) = File::open(format!("media/{}.{}", file, file_format)) {
-            command
-                .edit_response(
-                    &ctx.http,
-                    EditInteractionResponse::new().content(format!(
-                        "The file `{}.{}` does not exist in the `media` folder.",
-                        file, file_format
-                    )),
-                )
-                .await?;
+        let file_path = format!("media/{}.{}", file_name, file_format);
+        let file = match File::open(&file_path).await {
+            Ok(file) => file,
+            Err(_) => {
+                command
+                    .edit_response(
+                        &ctx.http,
+                        EditInteractionResponse::new().content(format!(
+                            "The file `{}` does not exist in the `media` folder.",
+                            file_path
+                        )),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
 
-            return Ok(());
-        }
-
-        command
-            .edit_response(
-                &ctx.http,
-                EditInteractionResponse::new().content("Opening thread..."),
-            )
-            .await?;
+        let file_size = file.metadata().await?.len();
+        let mut reader = BufReader::new(file);
 
         let thread = command
             .channel_id
             .create_thread(
                 &ctx.http,
-                CreateThread::new(format!("{}.{}", file, file_format))
+                CreateThread::new(format!("{}.{}", file_name, file_format))
                     .kind(serenity::all::ChannelType::PublicThread),
             )
             .await?;
 
-        command
-            .edit_response(
-                &ctx.http,
-                EditInteractionResponse::new().content("Reading file..."),
-            )
-            .await?;
+        let pb = ProgressBar::new(file_size);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("[{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
 
-        let file_base64 = match read(format!("media/{}.{}", file, file_format)) {
-            Ok(content) => general_purpose::STANDARD.encode(&content),
-            Err(_) => {
-                command
-                    .edit_response(
-                        &ctx.http,
-                        EditInteractionResponse::new().content("Error reading file."),
-                    )
-                    .await?;
+        let mut buffer = vec![0; CHUNK_SIZE];
+        let mut chunk_index = 0;
 
-                return Ok(());
+        loop {
+            let bytes_read = reader.read(&mut buffer).await?;
+            if bytes_read == 0 {
+                break;
             }
-        };
-        let total_chunks = (file_base64.len() as f64 / CHUNK_SIZE as f64).ceil() as usize;
 
-        command
-            .edit_response(
-                &ctx.http,
-                EditInteractionResponse::new().content("Uploading file..."),
-            )
-            .await?;
+            let chunk = &buffer[..bytes_read];
+            let base64_chunk = general_purpose::STANDARD.encode(chunk);
 
-        for i in 0..total_chunks {
-            let start = i * CHUNK_SIZE;
-            let end = std::cmp::min((i + 1) * CHUNK_SIZE, file_base64.len());
-            let chunk = &file_base64[start..end];
-
-            let attachment =
-                CreateAttachment::bytes(chunk.as_bytes(), format!("{}_{}.txt", file, i));
+            let attachment = CreateAttachment::bytes(
+                base64_chunk.as_bytes(),
+                format!("{}_{}.txt", file_name, chunk_index),
+            );
 
             thread
                 .send_message(
                     &ctx.http,
                     CreateMessage::new()
-                        .content(format!("{}_{}.txt", file, i))
+                        .content(format!("{}_{}.txt", file_name, chunk_index))
                         .add_file(attachment),
                 )
                 .await?;
 
-            command
-                .edit_response(
-                    &ctx.http,
-                    EditInteractionResponse::new().content(format!(
-                        "Uploading file... ({}/{})",
-                        i + 1,
-                        total_chunks,
-                    )),
-                )
-                .await?;
+            pb.inc(bytes_read as u64);
+            chunk_index += 1;
+
+            if chunk_index % 10 == 0 {
+                command
+                    .edit_response(
+                        &ctx.http,
+                        EditInteractionResponse::new().content(format!(
+                            "Uploading file... ({:.2}%)",
+                            (pb.position() as f64 / file_size as f64) * 100.0
+                        )),
+                    )
+                    .await?;
+            }
         }
+
+        pb.finish_with_message("Upload complete");
 
         let download_button = CreateButton::new("download")
             .label("Download")
@@ -141,8 +136,8 @@ impl Command for Upload {
         let action_row = CreateActionRow::Buttons(vec![download_button]);
 
         let builder = EditInteractionResponse::new()
-            .content(format!("The file `{}.{}` has been uploaded. You can download the file to your `downloads` folder by clicking on the green download button.", file, file_format))
-            .embed(CreateEmbed::new().title("File information").fields(vec![("Name", file, false), ("Format", file_format, false), ("Thread ID", &thread.id.to_string() , false)]))
+            .content(format!("The file `{}.{}` has been uploaded. You can download the file to your `downloads` folder by clicking on the green download button.", file_name, file_format))
+            .embed(CreateEmbed::new().title("File information").fields(vec![("Name", file_name, false), ("Format", file_format, false), ("Thread ID", &thread.id.to_string() , false)]))
             .components(vec![action_row]);
         command.edit_response(&ctx.http, builder).await?;
 
