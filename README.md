@@ -36,20 +36,12 @@ Discord Mass Uploader is a powerful tool that allows users to upload large files
     npm install
     ```
 
+3. Set up frontend and backend:
+    ```
+    npm run build
+    ```
 
-3. Set up the frontend:
-   ```
-   cd frontend
-   npm install
-   ```
-
-4. Set up the backend:
-   ```
-   cd ../backend
-   cargo build
-   ```
-
-5. Configure environment variables:
+4. Configure environment variables:
 
    For the backend:
    - Navigate to the `backend` folder
