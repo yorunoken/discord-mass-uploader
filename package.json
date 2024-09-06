@@ -4,10 +4,10 @@
     "description": "Uploads large files on Discord.",
     "scripts": {
         "frontend:dev": "cd frontend && bun run dev",
-        "backend:dev": "cd backend && cargo run",
+        "backend:dev": "bun create_db.js && cd backend && cargo run",
         "dev": "concurrently \"bun run backend:dev\" \"bun run frontend:dev\"",
         "frontend:build": "cd frontend && bun run build",
-        "backend:build": "cd backend && cargo build -r",
+        "backend:build": "bun create_db.js && cd backend && cargo build -r",
         "build": "bun run backend:build && bun run frontend:build",
         "frontend:start": "cd frontend && bun run start",
         "backend:start": "cd backend && cargo run -r",
@@ -23,6 +23,7 @@
         "concurrently": "^8.2.2"
     },
     "dependencies": {
-        "next-themes": "^0.3.0"
+        "next-themes": "^0.3.0",
+        "sqlite3": "^5.1.7"
     }
 }
