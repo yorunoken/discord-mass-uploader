@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose, Engine as _};
-use serenity::all::{ChannelId, CreateAttachment, CreateMessage, CreateThread, Http};
+use serenity::all::{ChannelId, CreateAttachment, CreateMessage, CreateThread, GuildChannel, Http};
 use std::{collections::HashMap, fmt::Write, path::Path, sync::Arc};
 
 use futures::StreamExt;
@@ -110,11 +110,13 @@ pub async fn download(
 
     let (tx, mut rx) = mpsc::channel(100);
 
-    download_file(thread_id, file_name, client, tx).await;
+    tokio::spawn(async move {
+        download_file(thread_id, file_name, client, tx).await;
+    });
 
     let stream = async_stream::stream! {
         while let Some(progress) = rx.recv().await {
-            yield Ok::<_, warp::Error>(Event::default().data(progress))
+            yield Ok::<_, warp::Error>(Event::default().data(progress.to_string()))
         }
     };
 
@@ -140,6 +142,7 @@ pub struct SuccessResponse {
 }
 
 const CHUNK_SIZE: usize = 18_874_368; // 18 MB
+
 pub async fn upload(
     request: UploadRequest,
     client: Arc<Http>,
@@ -195,7 +198,7 @@ pub async fn upload(
     let thread_clone = thread.clone();
     let file_name_clone = file_name.clone();
 
-    let file = match File::open(&file_path.clone()).await {
+    let file = match File::open(&file_path).await {
         Ok(file) => file,
         Err(e) => {
             return Ok(warp::reply::with_status(
@@ -225,43 +228,59 @@ pub async fn upload(
         let mut reader = BufReader::new(file);
         let mut buffer = vec![0; CHUNK_SIZE];
         let mut index = 0;
-        let mut total_bytes_processed = 0;
+        let mut total_bytes_processed: usize = 0;
 
         tokio::spawn(async move {
+            let mut bytes_read_total = 0;
+
             loop {
-                let bytes_read = reader.read(&mut buffer).await.unwrap();
+                let bytes_read = match reader.read(&mut buffer[bytes_read_total..]).await {
+                    Ok(n) => n,
+                    Err(e) => {
+                        eprintln!("Error reading file: {}", e);
+                        let _ = sender.send(-1.0).await;
+                        return;
+                    }
+                };
+
                 if bytes_read == 0 {
+                    if bytes_read_total > 0 {
+                        process_chunk(
+                            &buffer[..bytes_read_total],
+                            index,
+                            &file_name_clone,
+                            &thread_clone,
+                            &client,
+                            &sender,
+                            total_bytes_processed,
+                            file_size,
+                        )
+                        .await;
+                    }
                     break;
                 }
+
+                bytes_read_total += bytes_read;
                 total_bytes_processed += bytes_read;
 
-                let base64_chunk = general_purpose::STANDARD.encode(&buffer[..bytes_read]);
-
-                let attachment = CreateAttachment::bytes(
-                    base64_chunk.as_bytes(),
-                    format!("{}_{}.txt", file_name_clone, index),
-                );
-
-                if let Err(why) = thread_clone
-                    .send_message(
+                if bytes_read_total == CHUNK_SIZE {
+                    process_chunk(
+                        &buffer,
+                        index,
+                        &file_name_clone,
+                        &thread_clone,
                         &client,
-                        CreateMessage::new()
-                            .content(format!("{}_{}.txt", file_name_clone, index))
-                            .add_file(attachment),
+                        &sender,
+                        total_bytes_processed,
+                        file_size,
                     )
-                    .await
-                {
-                    eprintln!("Cannot send message to thread: {}", why);
-                    let _ = sender.send(0.0).await;
-                    return;
+                    .await;
+                    bytes_read_total = 0;
+                    index += 1;
                 }
-
-                let progress = (total_bytes_processed as f64 / file_size as f64) * 100.0;
-                println!("progress: {}", progress);
-                let _ = sender.send(progress).await;
-
-                index += 1;
             }
+
+            let _ = sender.send(100.0).await;
         });
     }
 
@@ -272,6 +291,41 @@ pub async fn upload(
         }),
         StatusCode::OK,
     ))
+}
+
+async fn process_chunk(
+    chunk: &[u8],
+    index: usize,
+    file_name: &str,
+    thread: &GuildChannel,
+    client: &Arc<Http>,
+    sender: &Sender<f64>,
+    total_bytes_processed: usize,
+    file_size: u64,
+) {
+    let base64_chunk = general_purpose::STANDARD.encode(chunk);
+    let attachment = CreateAttachment::bytes(
+        base64_chunk.as_bytes(),
+        format!("{}_{}.txt", file_name, index),
+    );
+
+    if let Err(why) = thread
+        .send_message(
+            &client,
+            CreateMessage::new()
+                .content(format!("{}_{}.txt", file_name, index))
+                .add_file(attachment),
+        )
+        .await
+    {
+        eprintln!("Cannot send message to thread: {}", why);
+        let _ = sender.send(-1.0).await;
+        return;
+    }
+
+    let progress = (total_bytes_processed as f64 / file_size as f64) * 100.0;
+    println!("Progress: {:.2}%", progress);
+    let _ = sender.send(progress).await;
 }
 
 #[derive(Deserialize)]

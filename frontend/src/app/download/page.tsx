@@ -44,52 +44,48 @@ export default function DownloadPage() {
         setProgress((prev) => ({ ...prev, [fileName]: 1 }));
         setActiveDownloads((prev) => ({ ...prev, [fileName]: true }));
 
-        return new Promise<void>((resolve, reject) => {
-            const eventSource = new EventSource(
-                `${backend_url}/api/download?thread_id=${threadId}&file=${fileName}`,
-            );
+        const eventSource = new EventSource(
+            `${backend_url}/api/download?thread_id=${threadId}&file=${fileName}`,
+        );
 
-            eventSource.onmessage = (event) => {
-                const currentProgress = Number(event.data);
-                console.log("Download progress:", currentProgress);
+        eventSource.onmessage = (event) => {
+            const currentProgress = Number(event.data);
+            console.log("Download progress:", currentProgress);
 
-                setProgress((prev) => ({
-                    ...prev,
-                    [fileName]: currentProgress,
-                }));
+            setProgress((prev) => ({
+                ...prev,
+                [fileName]: currentProgress,
+            }));
 
-                if (currentProgress === 100) {
-                    eventSource.close();
-                    setActiveDownloads((prev) => ({
-                        ...prev,
-                        [fileName]: false,
-                    }));
-
-                    toast({
-                        title: `Download finished!`,
-                        description: `Finished the download of ${fileName}.`,
-                    });
-                    resolve();
-                }
-            };
-
-            eventSource.onerror = (error) => {
-                console.error("Download error:", error);
+            if (currentProgress === 100) {
                 eventSource.close();
-
-                setProgress((prev) => ({
+                setActiveDownloads((prev) => ({
                     ...prev,
-                    [fileName]: 0,
+                    [fileName]: false,
                 }));
-                setActiveDownloads((prev) => ({ ...prev, [fileName]: false }));
 
                 toast({
-                    title: `Uh oh!`,
-                    description: `Something went wrong while downloading ${fileName} from thread ${threadId}`,
+                    title: `Download finished!`,
+                    description: `Finished the download of ${fileName}.`,
                 });
-                reject(error);
-            };
-        });
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            console.error("Download error:", error);
+            eventSource.close();
+
+            setProgress((prev) => ({
+                ...prev,
+                [fileName]: 0,
+            }));
+            setActiveDownloads((prev) => ({ ...prev, [fileName]: false }));
+
+            toast({
+                title: `Uh oh!`,
+                description: `Something went wrong while downloading ${fileName} from thread ${threadId}`,
+            });
+        };
     }
 
     async function deleteFileFromDb(fileName: string, threadId: string) {

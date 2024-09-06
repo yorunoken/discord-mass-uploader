@@ -5,7 +5,7 @@ use serenity::all::{ChannelId, Http};
 use std::sync::Arc;
 use tokio::{io::AsyncWriteExt, sync::mpsc::Sender};
 
-pub async fn download_file(thread_id: String, name: String, http: Arc<Http>, tx: Sender<String>) {
+pub async fn download_file(thread_id: String, name: String, http: Arc<Http>, tx: Sender<f32>) {
     let thread_id: u64 = thread_id.parse().expect("Failed to parse thread ID");
     let mut all_messages = Vec::new();
     let mut last_message_id = None;
@@ -54,11 +54,11 @@ pub async fn download_file(thread_id: String, name: String, http: Arc<Http>, tx:
             file.write_all(&decoded_chunk).await.unwrap();
 
             processed_messages += 1;
-            let progress = (processed_messages as f32 / total_messages as f32 * 100.0) as u32;
-            tx.send(progress.to_string()).await.unwrap();
+            let progress = processed_messages as f32 / total_messages as f32 * 100.0;
+            tx.send(progress).await.unwrap();
         }
     }
 
     file.flush().await.unwrap();
-    tx.send(100.to_string()).await.unwrap();
+    tx.send(100.0).await.unwrap();
 }

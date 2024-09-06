@@ -87,7 +87,6 @@ export default function UploadPage() {
 
         const progressPromise = new Promise<void>((resolve, reject) => {
             eventSource.onmessage = async (event) => {
-                console.log("new event: ", event);
                 const progress = Number(event.data);
                 setProgress(progress);
                 if (progress === 100) {
@@ -217,7 +216,7 @@ export default function UploadPage() {
                         <div className="space-y-2">
                             <Progress value={progress} className="w-full" />
                             <p className="text-sm text-gray-500 text-center">
-                                {progress}% Uploaded
+                                {progress.toFixed(2)}% Uploaded
                             </p>
                         </div>
                     )}
