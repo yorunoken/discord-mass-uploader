@@ -5,8 +5,16 @@ edition = "2021"
 
 [dependencies]
 serenity = "0.12.2"
+sqlx = { version = "0.8.0", features = ["sqlite", "json", "runtime-tokio"] }
+warp = "0.3.7"
+chrono = "0.4.38"
+serde = { version = "1.0.208", features = ["derive"] }
 tokio = { version = "1.39.3", features = ["macros", "rt-multi-thread"] }
 dotenvy = "0.15.7"
 base64 = "0.22.1"
 reqwest = "0.12.7"
 indicatif = "0.17.8"
+futures = "0.3.30"
+tokio-stream = "0.1.15"
+async-stream = "0.3.5"
+dirs = "5.0.1"

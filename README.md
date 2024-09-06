@@ -1,27 +1,102 @@
 # Discord Mass Uploader
 
-A Discord bot for uploading and downloading large files in chunks.
+Discord Mass Uploader is a powerful tool that allows users to upload large files to Discord servers and download them later. It breaks down files into smaller chunks, stores them in Discord threads, and reassembles them upon download.
 
-## How to Use
+## Tech Stack
 
-1. Download the appropriate binary for your system from the [releases section](https://github.com/yorunoken/discord-mass-uploader/releases) of this repository.
+### Frontend
+- Next.js
+- TypeScript
+- Tailwind CSS
+- shadcn/ui components
 
-2. Create two folders in the same directory as the binary:
-   - `media`: Place files you want to upload here.
-   - `downloads`: Downloaded files will be saved here.
+### Backend
+- Rust
+- Warp web framework
+- SQLite database
+- Serenity Discord library
 
-3. Create a `.env` file in the same directory as the binary with the following content:
+## Setup
+
+### Prerequisites
+- Node.js (or Bun) and npm
+- Rust and Cargo
+- Discord Bot Token
+
+### Installation
+
+1. Clone the repository:
    ```
-   TOKEN=your_discord_bot_token_here
+   git clone https://github.com/yorunoken/discord-mass-uploader.git
+   cd discord-mass-uploader
    ```
-   Replace `your_discord_bot_token_here` with your actual Discord bot token.
 
-4. Run the binary to start the bot.
+2. Set up root:
+    ```
+    npm install
+    ```
 
-5. In Discord, use the following commands:
-   - `/upload file:[filename] format:[file_extension]`: Uploads a file from the `media` folder.
-   - `/ping`: Checks if the bot is responsive.
 
-6. To download a file, click the "Download" button that appears after a successful upload.
+3. Set up the frontend:
+   ```
+   cd frontend
+   npm install
+   ```
 
-**Note:** Ensure your Discord bot has the necessary permissions in your server to send messages, create threads, and use slash commands.
+4. Set up the backend:
+   ```
+   cd ../backend
+   cargo build
+   ```
+
+5. Configure environment variables:
+
+   For the backend:
+   - Navigate to the `backend` folder
+   - Rename `.env.example` to `.env`
+   - Open `.env` and fill in your Discord bot token:
+    ```
+    TOKEN=your_discord_bot_token_here
+    PORT=8000
+    DATABASE_URL=sqlite://data.db
+    ```
+
+   For the frontend:
+   - Navigate to the `frontend` folder
+   - Rename `.env.example` to `.env`
+   - The default configuration should work, but you can modify if needed:
+    ```
+    BACKEND_PORT=8000
+    ```
+
+## Usage
+
+1. Start the server:
+   ```
+   npm run start
+   ```
+
+3. Open your browser and navigate to `http://localhost:3000`
+
+4. To upload a file:
+   - Click on "Upload" from the main page
+   - Enter your Discord channel ID
+   - Select a file to upload
+   - Click "Start Upload"
+
+5. To download a file:
+   - Click on "Download" from the main page
+   - Find the file you want to download
+   - Click the "Download" button next to the file
+
+## Important Notes
+
+- Ensure your Discord bot has the necessary permissions in the target channel.
+- Files are downloaded to your default Downloads folder.
+- Be cautious when downloading, as files with the same name will be overwritten.
+- There's a small chance Discord might delete your files, so please do not upload any sensitive information here.
+- I'm not responsible for any damages caused by this application, use at your own risk.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -1,4 +1,18 @@
-media
-downloads
-.env
-/target
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules
+
+# next.js
+.next/
+out/
+build
+
+*.db
+
+# environment files
+.env*
+!.env.example
+
+# rust
+target
