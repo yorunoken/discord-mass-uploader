@@ -36,29 +36,29 @@ Discord Mass Uploader is a powerful tool that allows users to upload large files
     npm install
     ```
 
-3. Set up frontend and backend:
-    ```
-    npm run build
-    ```
-
-4. Configure environment variables:
+3. Configure environment variables:
 
    For the backend:
    - Navigate to the `backend` folder
    - Rename `.env.example` to `.env`
    - Open `.env` and fill in your Discord bot token:
-    ```
-    TOKEN=your_discord_bot_token_here
-    PORT=8000
-    DATABASE_URL=sqlite://data.db
-    ```
+   ```
+   TOKEN=your_discord_bot_token_here
+   PORT=8000
+   DATABASE_URL=sqlite://data.db
+   ```
 
    For the frontend:
    - Navigate to the `frontend` folder
    - Rename `.env.example` to `.env`
    - The default configuration should work, but you can modify if needed:
+   ```
+   BACKEND_PORT=8000
     ```
-    BACKEND_PORT=8000
+
+4. Build frontend and backend:
+    ```
+    npm run build
     ```
 
 ## Usage
