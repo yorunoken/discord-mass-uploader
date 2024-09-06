@@ -10,7 +10,7 @@
         "backend:build": "cd backend && cargo build -r",
         "build": "bun run backend:build && bun run frontend:build",
         "frontend:start": "cd frontend && bun run start",
-        "backend:start": "cd backend && ./target/release/backend",
+        "backend:start": "cd backend && cargo run -r",
         "start": "concurrently \"bun run backend:start\" \"bun run frontend:start\"",
         "lint": "cd frontend && bun run lint"
     },
