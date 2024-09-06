@@ -1,6 +1,6 @@
 use base64::{engine::general_purpose, Engine as _};
 use serenity::all::{ChannelId, CreateAttachment, CreateMessage, CreateThread, Http};
-use std::{collections::HashMap, fmt::Write, sync::Arc};
+use std::{collections::HashMap, fmt::Write, path::Path, sync::Arc};
 
 use futures::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
@@ -9,12 +9,19 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 use warp::{http::StatusCode, reject::Rejection, reply::Reply, sse::Event};
 
-use tokio::sync::{mpsc, mpsc::Sender, Mutex};
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, BufReader},
+    sync::{
+        mpsc::{self, Sender},
+        Mutex,
+    },
+};
 
 use crate::{models::Files, utils::download::download_file};
 
 pub struct AppState {
-    progress_sender: Mutex<Option<Sender<u32>>>,
+    progress_sender: Mutex<Option<Sender<f64>>>,
 }
 
 impl AppState {
@@ -62,7 +69,7 @@ pub async fn files(
 }
 
 pub async fn upload_progress(state: Arc<AppState>) -> Result<impl Reply, Rejection> {
-    let (tx, rx) = tokio::sync::mpsc::channel::<u32>(100);
+    let (tx, rx) = tokio::sync::mpsc::channel(100);
 
     *state.progress_sender.lock().await = Some(tx);
 
@@ -118,8 +125,7 @@ pub async fn download(
 #[derive(Deserialize)]
 pub struct UploadRequest {
     channel_id: String,
-    file: Vec<u8>,
-    file_name: String,
+    file_path: String,
 }
 
 #[derive(Serialize)]
@@ -129,9 +135,8 @@ pub struct ErrorResponse {
 
 #[derive(Serialize)]
 pub struct SuccessResponse {
-    message: String,
-    thread_id: String,
     file_name: String,
+    thread_id: String,
 }
 
 const CHUNK_SIZE: usize = 18_874_368; // 18 MB
@@ -141,10 +146,15 @@ pub async fn upload(
     state: Arc<AppState>,
 ) -> Result<impl Reply, Rejection> {
     let UploadRequest {
-        file,
         channel_id,
-        file_name,
+        file_path,
     } = request;
+
+    let file_name = Path::new(&file_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("unknown")
+        .to_string();
 
     let channel_id: u64 = match channel_id.parse() {
         Ok(ok) => ok,
@@ -185,11 +195,47 @@ pub async fn upload(
     let thread_clone = thread.clone();
     let file_name_clone = file_name.clone();
 
+    let file = match File::open(&file_path.clone()).await {
+        Ok(file) => file,
+        Err(e) => {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&ErrorResponse {
+                    error: format!("Cannot read file: {}", e),
+                }),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ));
+        }
+    };
+
+    let metadata = match file.metadata().await {
+        Ok(o) => o,
+        Err(e) => {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&ErrorResponse {
+                    error: format!("Failed to fetch file metadata: {}", e),
+                }),
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ));
+        }
+    };
+
+    let file_size = metadata.len();
+
     if let Some(sender) = progress_sender {
-        let total_chunks = file.chunks(CHUNK_SIZE).len();
+        let mut reader = BufReader::new(file);
+        let mut buffer = vec![0; CHUNK_SIZE];
+        let mut index = 0;
+        let mut total_bytes_processed = 0;
+
         tokio::spawn(async move {
-            for (index, chunk) in file.chunks(CHUNK_SIZE).enumerate() {
-                let base64_chunk = general_purpose::STANDARD.encode(chunk);
+            loop {
+                let bytes_read = reader.read(&mut buffer).await.unwrap();
+                if bytes_read == 0 {
+                    break;
+                }
+                total_bytes_processed += bytes_read;
+
+                let base64_chunk = general_purpose::STANDARD.encode(&buffer[..bytes_read]);
 
                 let attachment = CreateAttachment::bytes(
                     base64_chunk.as_bytes(),
@@ -206,20 +252,22 @@ pub async fn upload(
                     .await
                 {
                     eprintln!("Cannot send message to thread: {}", why);
-                    let _ = sender.send(0).await;
+                    let _ = sender.send(0.0).await;
                     return;
                 }
 
-                let progress = ((index + 1) as f32 / total_chunks as f32 * 100.0) as u32;
+                let progress = (total_bytes_processed as f64 / file_size as f64) * 100.0;
+                println!("progress: {}", progress);
                 let _ = sender.send(progress).await;
+
+                index += 1;
             }
         });
     }
 
     Ok(warp::reply::with_status(
         warp::reply::json(&SuccessResponse {
-            message: String::from("Started upload."),
-            file_name,
+            file_name: file_name.to_string(),
             thread_id: thread.id.to_string(),
         }),
         StatusCode::OK,
