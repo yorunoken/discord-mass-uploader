@@ -73,7 +73,7 @@ Discord Mass Uploader is a powerful tool that allows users to upload large files
 4. To upload a file:
    - Click on "Upload" from the main page
    - Enter your Discord channel ID
-   - Select a file to upload
+   - Enter the file path
    - Click "Start Upload"
 
 5. To download a file:
