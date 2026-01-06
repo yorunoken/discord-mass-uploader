@@ -9,7 +9,7 @@ sqlx = { version = "0.8.0", features = ["sqlite", "json", "runtime-tokio"] }
 warp = "0.3.7"
 chrono = "0.4.38"
 serde = { version = "1.0.208", features = ["derive"] }
-tokio = { version = "1.39.3", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.43.1", features = ["macros", "rt-multi-thread"] }
 dotenvy = "0.15.7"
 base64 = "0.22.1"
 reqwest = "0.12.7"
